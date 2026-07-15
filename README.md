@@ -1,99 +1,134 @@
-# Literal Launcher
+# ADPS Launcher
 
-Life within five meters.
+ADPS 디스플레이 제품을 위한 가로형 Android 런처 프로토타입입니다.
 
-A minimalist text-based Android launcher.
+이 프로젝트는 [Literal Launcher](https://github.com/256x/launcher)를 기반으로 하며, 터치 기반 산업용 디스플레이 환경에 맞게 수정되었습니다.
 
-<p>
-  <a href="https://github.com/256x/launcher/releases/latest"><img src="https://img.shields.io/github/v/release/256x/launcher?label=GitHub%20Release"></a>&nbsp;<img src="https://img.shields.io/badge/Android-9%2B-blue">&nbsp;<img src="https://img.shields.io/badge/license-MIT-lightgrey">
-</p>
+## 대상 환경
 
-<p>
-<img width="180" alt="Home Screen" src="https://github.com/user-attachments/assets/5ec650ee-a9e6-411e-89ad-eae68a83c2b4" />
-<img width="180" alt="Apps Screen" src="https://github.com/user-attachments/assets/4eecf4d1-c967-4947-835f-39ebd1e55aa2" />
-<img width="180" alt="Chest Screen" src="https://github.com/user-attachments/assets/028113b5-a9bc-44c1-aac9-cf063efca5db" />
-<img width="180" alt="Settings Screen" src="https://github.com/user-attachments/assets/d65ed335-c826-445d-b4d9-a85c0a660670" />
-</p>
+- Android 9.0
+- Minimum SDK: API 28
+- 가로 화면 고정
+- 기준 해상도: 1366 × 768
+- 직접 터치 입력
+- 검은색 배경
+- Google Play Store가 없는 장비 환경 고려
 
-[User Guide](./docs/USER_GUIDE.md)
+## 현재 구현 기능
 
-## Why?
+- 기본 Android 홈 런처 기능
+- 설치된 애플리케이션 목록 표시
+- 앱 터치 실행
+- 런처 설정 저장
+- 홈 화면 고정 바로가기
+- 시계 및 날짜 표시
+- 도시명 기반 날씨 조회
+- HDMI 임시 버튼
+- YouTube 앱 실행 및 웹 대체
+- 브라우저 바로가기
+- 웹 지도 바로가기
+- Android 시스템 설정 바로가기
 
-Humans can hold roughly 10 things in working memory.
+## 홈 화면 구성
 
-Most launchers ignore this. They give you grids of icons, folders, widgets, search bars — and call it productivity.
+현재 홈 화면에는 다음 메뉴가 표시됩니다.
 
-But if your phone has 10 apps you actually use every day, you don't need any of that.
+- Weather
+- HDMI
+- YouTube
+- Browser
+- Maps
+- Settings
+- All Apps
 
-You just need those 10, always one tap away.
+## 기능별 동작
 
-## The Idea
+### Weather
 
-**Assign your essentials to slots. Everything else fades into the background.**
+사용자가 도시명을 입력하면 웹 API를 통해 해당 도시의 날씨 정보를 조회합니다.
 
-10 fixed positions. No search. No icons. Just text.
+현재 프로토타입은 도시 검색과 날씨 데이터 조회에 Open-Meteo 서비스를 사용합니다. 인터넷 연결이 필요합니다.
 
-Icons make your eyes wander. Text makes you read and decide.
-Swipe up reveals your full app list — your Tier 1, alphabetically sorted.
-Rarely-used apps go into the Chest: out of sight, but still directly launchable.
+### HDMI
 
-## Features
+현재 HDMI 메뉴는 버튼과 안내창만 구현된 상태입니다.
 
-- **App Slots**: Assign apps to 10 fixed launch positions on the screen
-- **Text-only list**: No icons. App names only, in your choice of font
-- **Chest**: A secondary space for Tier 2 apps — hidden but directly launchable
-- **Renaming**: Custom display names for any app
-- **Customize**: Font, UI scale, drawer alignment for left-hand use
+실제 HDMI 입력 전환을 위해서는 보드 제조사가 제공하는 API, 시스템 서비스, Broadcast Intent, UART 명령, 전용 SDK 등의 하드웨어 제어 인터페이스가 필요합니다.
 
-## Why no icons?
+### YouTube
 
-Icons cause visual noise. Your eyes scan the grid looking for the right shape instead of reading what you want.
+기기에 YouTube 앱이 설치되어 있으면 앱 실행을 먼저 시도합니다.
 
-Text forces a moment of intention. That's a feature, not a limitation.
+YouTube 앱이 없으면 설치된 웹 브라우저를 통해 YouTube 웹사이트를 엽니다.
 
-## Why no search?
+### Maps
 
-If you need to search for an app, it means your list is too long.
+Maps 버튼은 설치된 웹 브라우저에서 웹 기반 지도 서비스를 엽니다.
 
-Use Renaming to curate your Tier 1 list — prefix with `a_` to bring an app to the top, `z_` to push it down. Keep it short enough that search becomes unnecessary.
+지도 주소는 다음 파일에서 변경할 수 있습니다.
 
-## The Chest: not hidden, just backgrounded
+```text
+app/src/main/java/fumi/day/literallauncher/AdpsLauncherApp.kt
+```
 
-Most launchers let you hide apps — but hidden apps require a trip to settings to unhide before you can launch them.
+### All Apps
 
-The Chest works differently. Apps in the Chest are removed from your main list, but remain **directly launchable** from the Chest at any time. No restore step needed.
+현재 기기에 설치된 실행 가능한 애플리케이션 목록을 읽어 앱 목록 화면에 표시합니다.
 
-Use it for apps you open once a month. They stay out of your way without becoming inaccessible.
+따라서 에뮬레이터에 표시되는 앱 목록과 실제 ADPS 제품에 표시되는 앱 목록은 다를 수 있습니다.
 
-## Who is this for?
+## 빌드 및 실행 방법
 
-This launcher may appeal to people who:
+1. Android Studio에서 프로젝트 최상위 폴더를 엽니다.
+2. Gradle Sync가 완료될 때까지 기다립니다.
+3. Android 9 호환 에뮬레이터 또는 실제 장비를 선택합니다.
+4. `app` 실행 구성을 선택합니다.
+5. Android에서 기본 홈 앱을 묻는 경우 ADPS Launcher를 선택합니다.
 
-- want a distraction-free phone
-- prefer fixed tap targets over search
-- like minimalist interfaces
-- find icon grids visually overwhelming
+## 현재 제한 사항
 
-## Philosophy
+- UI는 1366 × 768 가로 화면을 기준으로 설계되었습니다.
+- 일부 여백과 글자 크기는 고정된 `dp`, `sp` 값을 사용합니다.
+- 여러 해상도에 대한 완전한 반응형 UI는 아직 적용되지 않았습니다.
+- HDMI 입력 전환은 실제 하드웨어와 연결되지 않았습니다.
+- 웹 기반 기능은 브라우저와 인터넷 연결이 필요합니다.
+- 비GMS 장비에서는 Google 애플리케이션이 제공되지 않을 수 있습니다.
 
-Literal Launcher is not a launcher that does less.
+## 향후 개선 계획
 
-It's a different model of what a phone's home screen should be.
+- 화면 크기에 따른 반응형 레이아웃
+- 홈 화면 바로가기 설정 기능
+- 전체 앱 목록 관리자 전용 접근
+- 앱 검색 기능
+- 앱 표시 및 숨김 설정
+- 제품용 날씨 API 구성
+- 보드 전용 HDMI 입력 전환
+- 회사 로고 및 최종 디자인 적용
 
-If a feature requires learning gestures or browsing menus, it probably doesn't belong here.
+## 프로젝트 주요 구조
 
-## Credits
+```text
+app/
+└─ src/
+   └─ main/
+      ├─ AndroidManifest.xml
+      └─ java/
+         └─ fumi/
+            └─ day/
+               └─ literallauncher/
+                  ├─ MainActivity.kt
+                  └─ AdpsLauncherApp.kt
+```
 
-Inspired by [μ launcher](https://github.com/jrpie/launcher) by jrpie — a launcher built around intentional, gesture-based navigation. Literal Launcher takes a different approach: tap targets instead of gestures, text instead of icons, and date/battery display built in.
+## 기반 프로젝트 및 라이선스
 
-## Development
+이 프로젝트는 Literal Launcher를 기반으로 제작되었습니다.
 
-- Kotlin / Jetpack Compose
-- Target: Android 9.0+
-- No Google APIs. No tracking.
+- 원본 저장소: https://github.com/256x/launcher
+- 원본 라이선스: MIT License
 
-This app was built with substantial assistance from [Claude](https://claude.ai) (Anthropic). AI was involved throughout development, including writing code.
+원본 프로젝트의 저작권 및 라이선스 고지는 유지해야 합니다.
 
-## License
+## 개발 상태
 
-MIT
+현재 개발 중인 프로토타입입니다.
