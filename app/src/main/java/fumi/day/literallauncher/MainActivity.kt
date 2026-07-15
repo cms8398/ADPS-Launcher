@@ -3,6 +3,7 @@ package fumi.day.literallauncher
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -14,29 +15,22 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.lifecycle.ViewModelProvider
-import fumi.day.literallauncher.ui.LauncherViewModel
-import fumi.day.literallauncher.ui.LiteralLauncherApp
 
 class MainActivity : ComponentActivity() {
-
-    private lateinit var viewModel: LauncherViewModel
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        viewModel = ViewModelProvider(this)[LauncherViewModel::class.java]
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        window.setBackgroundDrawable(ColorDrawable(0))
+        window.setBackgroundDrawable(ColorDrawable(Color.BLACK))
+
         setContent {
             HideSystemBars()
-            LiteralLauncherApp(viewModel)
+            AdpsLauncherApp()
         }
     }
 
     override fun onResume() {
         super.onResume()
         hideSystemBarsForcefully()
-        viewModel.refreshApps()
     }
 
     private fun hideSystemBarsForcefully() {
@@ -51,6 +45,7 @@ class MainActivity : ComponentActivity() {
 private fun HideSystemBars() {
     val view = LocalView.current
     val context = LocalContext.current
+
     SideEffect {
         val activity = context.findActivity() ?: return@SideEffect
         val controller = WindowCompat.getInsetsController(activity.window, view)
