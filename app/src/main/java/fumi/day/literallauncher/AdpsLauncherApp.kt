@@ -3,7 +3,6 @@ package fumi.day.literallauncher
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.BorderStroke
@@ -18,17 +17,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -41,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -78,6 +81,7 @@ private val LauncherColors = darkColorScheme(
 private enum class LauncherPage {
     HOME,
     ALL_APPS,
+    AI_ASSISTANT,
 }
 
 private data class FeatureItem(
@@ -104,6 +108,13 @@ private sealed interface WeatherUiState {
     data object Loading : WeatherUiState
     data class Success(val data: WeatherData) : WeatherUiState
     data class Error(val message: String) : WeatherUiState
+}
+
+private sealed interface AiUiState {
+    data object Idle : AiUiState
+    data object Loading : AiUiState
+    data class Success(val answer: String) : AiUiState
+    data class Error(val message: String) : AiUiState
 }
 
 @Composable
@@ -170,12 +181,17 @@ fun AdpsLauncherApp() {
                             messageDialog = "시스템 설정을 열 수 없습니다."
                         }
                     },
+                    onAiAssistantClick = { currentPage = LauncherPage.AI_ASSISTANT },
                     onAllAppsClick = { currentPage = LauncherPage.ALL_APPS },
                 )
 
                 LauncherPage.ALL_APPS -> AllAppsScreen(
                     onBack = { currentPage = LauncherPage.HOME },
                     onLaunchError = { messageDialog = it },
+                )
+
+                LauncherPage.AI_ASSISTANT -> AiAssistantScreen(
+                    onBack = { currentPage = LauncherPage.HOME },
                 )
             }
         }
@@ -221,6 +237,7 @@ private fun HomeScreen(
     onBrowserClick: () -> Unit,
     onMapsClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    onAiAssistantClick: () -> Unit,
     onAllAppsClick: () -> Unit,
 ) {
     val features = listOf(
@@ -228,8 +245,9 @@ private fun HomeScreen(
         FeatureItem("HDMI", "Input switching", onHdmiClick),
         FeatureItem("YouTube", "Open video app", onYouTubeClick),
         FeatureItem("Browser", "Open the web", onBrowserClick),
-        FeatureItem("Maps", "Open map app", onMapsClick),
+        FeatureItem("Maps", "Open Naver Map", onMapsClick),
         FeatureItem("Settings", "System settings", onSettingsClick),
+        FeatureItem("AI Assistant", "Ask Gemini", onAiAssistantClick),
     )
 
     Row(
@@ -278,7 +296,7 @@ private fun HomeScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(24.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             features.chunked(3).forEach { rowItems ->
                 Row(
@@ -294,6 +312,198 @@ private fun HomeScreen(
                                 .weight(1f)
                                 .fillMaxHeight(),
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiAssistantScreen(
+    onBack: () -> Unit,
+) {
+    val coroutineScope = rememberCoroutineScope()
+    var question by remember { mutableStateOf("") }
+    var aiState by remember { mutableStateOf<AiUiState>(AiUiState.Idle) }
+    val answerScrollState = rememberScrollState()
+
+    fun submitQuestion() {
+        val trimmedQuestion = question.trim()
+        if (trimmedQuestion.isEmpty() || aiState is AiUiState.Loading) return
+
+        aiState = AiUiState.Loading
+        coroutineScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                GeminiApiClient.generateAnswer(
+                    apiKey = BuildConfig.GEMINI_API_KEY,
+                    userPrompt = trimmedQuestion,
+                )
+            }
+
+            aiState = when (result) {
+                is GeminiResult.Success -> AiUiState.Success(result.text)
+                is GeminiResult.Error -> AiUiState.Error(result.message)
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(36.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Button(
+                onClick = onBack,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White,
+                    contentColor = Color.Black,
+                ),
+            ) {
+                Text("Back")
+            }
+            Spacer(modifier = Modifier.width(24.dp))
+            Text(
+                text = "AI Assistant",
+                fontSize = 34.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = "Gemini",
+                color = Color(0xFF9E9E9E),
+                fontSize = 17.sp,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxSize(),
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+        ) {
+            Card(
+                modifier = Modifier
+                    .weight(0.42f)
+                    .fillMaxHeight(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
+                border = BorderStroke(1.dp, Color(0xFF363636)),
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                ) {
+                    Text(
+                        text = "질문",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = question,
+                        onValueChange = { question = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        label = { Text("Gemini에게 질문하세요") },
+                        placeholder = { Text("예: 로컬 디밍이 무엇인지 설명해 줘") },
+                        enabled = aiState !is AiUiState.Loading,
+                    )
+                    Spacer(modifier = Modifier.height(18.dp))
+                    Button(
+                        onClick = ::submitQuestion,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(64.dp),
+                        enabled = question.isNotBlank() && aiState !is AiUiState.Loading,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.White,
+                            contentColor = Color.Black,
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text(
+                            text = if (aiState is AiUiState.Loading) "Sending…" else "Send",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+            }
+
+            Card(
+                modifier = Modifier
+                    .weight(0.58f)
+                    .fillMaxHeight(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
+                border = BorderStroke(1.dp, Color(0xFF363636)),
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                ) {
+                    Text(
+                        text = "답변",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        contentAlignment = Alignment.TopStart,
+                    ) {
+                        when (val state = aiState) {
+                            AiUiState.Idle -> Text(
+                                text = "왼쪽 입력창에 질문을 입력한 뒤 Send를 눌러주세요.",
+                                color = Color(0xFF9E9E9E),
+                                fontSize = 19.sp,
+                            )
+
+                            AiUiState.Loading -> Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            ) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                )
+                                Text(
+                                    text = "Gemini가 답변을 생성하고 있습니다…",
+                                    color = Color(0xFFD5D5D5),
+                                    fontSize = 19.sp,
+                                )
+                            }
+
+                            is AiUiState.Success -> Text(
+                                text = state.answer,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(answerScrollState),
+                                color = Color.White,
+                                fontSize = 20.sp,
+                                lineHeight = 30.sp,
+                            )
+
+                            is AiUiState.Error -> Text(
+                                text = state.message,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(answerScrollState),
+                                color = Color(0xFFEF9A9A),
+                                fontSize = 18.sp,
+                                lineHeight = 27.sp,
+                            )
+                        }
                     }
                 }
             }

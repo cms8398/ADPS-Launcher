@@ -6,6 +6,11 @@ if (localPropertiesFile.exists()) {
     localProperties.load(localPropertiesFile.inputStream())
 }
 
+fun String.escapeForBuildConfig(): String =
+    replace("\\", "\\\\").replace("\"", "\\\"")
+
+val geminiApiKey = localProperties.getProperty("GEMINI_API_KEY", "")
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -34,12 +39,22 @@ android {
         }
     }
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         applicationId = "fumi.day.literallauncher"
         minSdk = 28
         targetSdk = 36
         versionCode = 21
         versionName = "1.5.0"
+
+        buildConfigField(
+            "String",
+            "GEMINI_API_KEY",
+            "\"${geminiApiKey.escapeForBuildConfig()}\"",
+        )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
