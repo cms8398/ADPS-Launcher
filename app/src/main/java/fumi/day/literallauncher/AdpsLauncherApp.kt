@@ -7,8 +7,11 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -47,6 +51,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,6 +73,7 @@ import java.util.Locale
 private const val PREFS_NAME = "adps_launcher"
 private const val PREF_WEATHER_CITY = "weather_city"
 private const val DEFAULT_CITY = "Seoul"
+private const val SCREEN_SAVER_TIMEOUT_MS = 5 * 60 * 1000L
 
 private val LauncherColors = darkColorScheme(
     primary = Color.White,
@@ -82,6 +89,7 @@ private enum class LauncherPage {
     HOME,
     ALL_APPS,
     AI_ASSISTANT,
+    SCREEN_SAVER,
 }
 
 private data class FeatureItem(
@@ -131,6 +139,7 @@ fun AdpsLauncherApp() {
         }
         var weatherState by remember { mutableStateOf<WeatherUiState>(WeatherUiState.Loading) }
         var weatherRefreshKey by remember { mutableIntStateOf(0) }
+        var idleResetKey by remember { mutableIntStateOf(0) }
         var showCityDialog by remember { mutableStateOf(false) }
         var messageDialog by remember { mutableStateOf<String?>(null) }
 
@@ -141,8 +150,24 @@ fun AdpsLauncherApp() {
             }
         }
 
+        LaunchedEffect(currentPage, idleResetKey) {
+            if (currentPage != LauncherPage.SCREEN_SAVER) {
+                delay(SCREEN_SAVER_TIMEOUT_MS)
+                showCityDialog = false
+                messageDialog = null
+                currentPage = LauncherPage.SCREEN_SAVER
+            }
+        }
+
         Surface(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        idleResetKey++
+                    }
+                },
             color = Color.Black,
         ) {
             when (currentPage) {
@@ -182,6 +207,7 @@ fun AdpsLauncherApp() {
                         }
                     },
                     onAiAssistantClick = { currentPage = LauncherPage.AI_ASSISTANT },
+                    onScreenSaverClick = { currentPage = LauncherPage.SCREEN_SAVER },
                     onAllAppsClick = { currentPage = LauncherPage.ALL_APPS },
                 )
 
@@ -192,6 +218,10 @@ fun AdpsLauncherApp() {
 
                 LauncherPage.AI_ASSISTANT -> AiAssistantScreen(
                     onBack = { currentPage = LauncherPage.HOME },
+                )
+
+                LauncherPage.SCREEN_SAVER -> ScreenSaverScreen(
+                    onExit = { currentPage = LauncherPage.HOME },
                 )
             }
         }
@@ -238,6 +268,7 @@ private fun HomeScreen(
     onMapsClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onAiAssistantClick: () -> Unit,
+    onScreenSaverClick: () -> Unit,
     onAllAppsClick: () -> Unit,
 ) {
     val features = listOf(
@@ -248,73 +279,244 @@ private fun HomeScreen(
         FeatureItem("Maps", "Open Naver Map", onMapsClick),
         FeatureItem("Settings", "System settings", onSettingsClick),
         FeatureItem("AI Assistant", "Ask Gemini", onAiAssistantClick),
+        FeatureItem("Screen Saver", "Preview mode", onScreenSaverClick),
     )
 
-    Row(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 48.dp, vertical = 40.dp),
-        horizontalArrangement = Arrangement.spacedBy(40.dp),
+            .safeDrawingPadding(),
     ) {
-        Column(
-            modifier = Modifier
-                .width(360.dp)
-                .fillMaxHeight(),
-            verticalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column {
-                ClockAndDate()
-                Spacer(modifier = Modifier.height(36.dp))
-                WeatherSummaryCard(
-                    city = weatherCity,
-                    weatherState = weatherState,
-                    onClick = onWeatherClick,
-                    onRefresh = onWeatherRefresh,
-                )
-            }
+        val fontScale = LocalDensity.current.fontScale
+        val veryCompactMode =
+            maxWidth < 850.dp || maxHeight < 470.dp || fontScale >= 1.25f
+        val compactMode =
+            veryCompactMode || maxWidth < 1150.dp || maxHeight < 650.dp || fontScale > 1.05f
 
-            Button(
-                onClick = onAllAppsClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(72.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White,
-                    contentColor = Color.Black,
-                ),
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Text(
-                    text = "All Apps",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
+        val horizontalPadding = when {
+            veryCompactMode -> 12.dp
+            compactMode -> 22.dp
+            else -> 48.dp
+        }
+        val verticalPadding = when {
+            veryCompactMode -> 10.dp
+            compactMode -> 20.dp
+            else -> 40.dp
+        }
+        val sectionGap = when {
+            veryCompactMode -> 12.dp
+            compactMode -> 20.dp
+            else -> 40.dp
+        }
+        val tileHorizontalGap = when {
+            veryCompactMode -> 8.dp
+            compactMode -> 14.dp
+            else -> 24.dp
+        }
+        val tileVerticalGap = when {
+            veryCompactMode -> 8.dp
+            compactMode -> 12.dp
+            else -> 18.dp
+        }
+        val leftPanelWidth = when {
+            veryCompactMode -> 220.dp
+            compactMode -> 280.dp
+            else -> 360.dp
+        }
+        val clockWeatherGap = when {
+            veryCompactMode -> 10.dp
+            compactMode -> 18.dp
+            else -> 36.dp
+        }
+        val buttonGap = when {
+            veryCompactMode -> 8.dp
+            compactMode -> 12.dp
+            else -> 16.dp
+        }
+        val allAppsHeight = when {
+            veryCompactMode -> 48.dp
+            compactMode -> 56.dp
+            else -> 72.dp
+        }
+        val allAppsFontSize = when {
+            veryCompactMode -> 16.sp
+            compactMode -> 18.sp
+            else -> 22.sp
         }
 
-        Column(
+        Row(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+                .fillMaxSize()
+                .padding(
+                    horizontal = horizontalPadding,
+                    vertical = verticalPadding,
+                ),
+            horizontalArrangement = Arrangement.spacedBy(sectionGap),
         ) {
-            features.chunked(3).forEach { rowItems ->
-                Row(
+            Column(
+                modifier = Modifier
+                    .width(leftPanelWidth)
+                    .fillMaxHeight(),
+            ) {
+                Column(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
-                    rowItems.forEach { feature ->
-                        FeatureTile(
-                            item = feature,
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight(),
-                        )
+                    ClockAndDate(
+                        compactMode = compactMode,
+                        veryCompactMode = veryCompactMode,
+                    )
+                    Spacer(modifier = Modifier.height(clockWeatherGap))
+                    WeatherSummaryCard(
+                        city = weatherCity,
+                        weatherState = weatherState,
+                        onClick = onWeatherClick,
+                        onRefresh = onWeatherRefresh,
+                        compactMode = compactMode,
+                        veryCompactMode = veryCompactMode,
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(buttonGap))
+
+                Button(
+                    onClick = onAllAppsClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(allAppsHeight),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White,
+                        contentColor = Color.Black,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text(
+                        text = "All Apps",
+                        fontSize = allAppsFontSize,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                verticalArrangement = Arrangement.spacedBy(tileVerticalGap),
+            ) {
+                features.chunked(3).forEach { rowItems ->
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(tileHorizontalGap),
+                    ) {
+                        rowItems.forEach { feature ->
+                            FeatureTile(
+                                item = feature,
+                                compactMode = compactMode,
+                                veryCompactMode = veryCompactMode,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(),
+                            )
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ScreenSaverScreen(
+    onExit: () -> Unit,
+) {
+    var now by remember { mutableStateOf(LocalDateTime.now()) }
+    var positionIndex by remember { mutableIntStateOf(0) }
+
+    val positions = remember {
+        listOf(
+            Alignment.TopStart,
+            Alignment.TopEnd,
+            Alignment.Center,
+            Alignment.BottomEnd,
+            Alignment.BottomStart,
+        )
+    }
+
+    val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
+    val dateFormatter = remember {
+        DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy", Locale.getDefault())
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = LocalDateTime.now()
+            delay(1_000)
+        }
+    }
+
+    // OLED 번인 방지를 위해 표시 위치를 주기적으로 이동합니다.
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(20_000)
+            positionIndex = (positionIndex + 1) % positions.size
+        }
+    }
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .safeDrawingPadding()
+            .clickable(onClick = onExit)
+            .padding(48.dp),
+        contentAlignment = positions[positionIndex],
+    ) {
+        val compactMode = maxWidth < 900.dp || maxHeight < 500.dp
+        val timeFontSize = if (compactMode) 72.sp else 108.sp
+        val dateFontSize = if (compactMode) 20.sp else 28.sp
+        val brandFontSize = if (compactMode) 16.sp else 22.sp
+        val hintFontSize = if (compactMode) 12.sp else 15.sp
+
+        Column(
+            horizontalAlignment = when (positions[positionIndex]) {
+                Alignment.TopEnd,
+                Alignment.BottomEnd -> Alignment.End
+
+                Alignment.Center -> Alignment.CenterHorizontally
+                else -> Alignment.Start
+            },
+        ) {
+            Text(
+                text = now.format(timeFormatter),
+                color = Color.White,
+                fontSize = timeFontSize,
+                fontWeight = FontWeight.ExtraLight,
+                maxLines = 1,
+            )
+            Text(
+                text = now.format(dateFormatter),
+                color = Color(0xFFBDBDBD),
+                fontSize = dateFontSize,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = "ADPS Transparent Display",
+                color = Color(0xFF8A8A8A),
+                fontSize = brandFontSize,
+                maxLines = 1,
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Touch anywhere to return",
+                color = Color(0xFF5F5F5F),
+                fontSize = hintFontSize,
+                maxLines = 1,
+            )
         }
     }
 }
@@ -351,6 +553,7 @@ private fun AiAssistantScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .safeDrawingPadding()
             .padding(36.dp),
     ) {
         Row(
@@ -413,7 +616,6 @@ private fun AiAssistantScreen(
                             .fillMaxWidth()
                             .weight(1f),
                         label = { Text("Gemini에게 질문하세요") },
-                        placeholder = { Text("예: 로컬 디밍이 무엇인지 설명해 줘") },
                         enabled = aiState !is AiUiState.Loading,
                     )
                     Spacer(modifier = Modifier.height(18.dp))
@@ -512,7 +714,10 @@ private fun AiAssistantScreen(
 }
 
 @Composable
-private fun ClockAndDate() {
+private fun ClockAndDate(
+    compactMode: Boolean,
+    veryCompactMode: Boolean,
+) {
     var now by remember { mutableStateOf(LocalDateTime.now()) }
 
     LaunchedEffect(Unit) {
@@ -526,19 +731,30 @@ private fun ClockAndDate() {
     val dateFormatter = remember {
         DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy", Locale.getDefault())
     }
+    val timeFontSize = when {
+        veryCompactMode -> 42.sp
+        compactMode -> 54.sp
+        else -> 72.sp
+    }
+    val dateFontSize = when {
+        veryCompactMode -> 13.sp
+        compactMode -> 16.sp
+        else -> 21.sp
+    }
 
     Text(
         text = now.format(timeFormatter),
         color = Color.White,
-        fontSize = 72.sp,
+        fontSize = timeFontSize,
         fontWeight = FontWeight.Light,
         maxLines = 1,
     )
     Text(
         text = now.format(dateFormatter),
         color = Color(0xFFBDBDBD),
-        fontSize = 21.sp,
+        fontSize = dateFontSize,
         maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
     )
 }
 
@@ -548,7 +764,55 @@ private fun WeatherSummaryCard(
     weatherState: WeatherUiState,
     onClick: () -> Unit,
     onRefresh: () -> Unit,
+    compactMode: Boolean,
+    veryCompactMode: Boolean,
 ) {
+    val contentPadding = when {
+        veryCompactMode -> 12.dp
+        compactMode -> 18.dp
+        else -> 24.dp
+    }
+    val labelFontSize = when {
+        veryCompactMode -> 12.sp
+        compactMode -> 14.sp
+        else -> 16.sp
+    }
+    val cityFontSize = when {
+        veryCompactMode -> 18.sp
+        compactMode -> 22.sp
+        else -> 26.sp
+    }
+    val temperatureFontSize = when {
+        veryCompactMode -> 28.sp
+        compactMode -> 36.sp
+        else -> 44.sp
+    }
+    val conditionFontSize = when {
+        veryCompactMode -> 13.sp
+        compactMode -> 15.sp
+        else -> 18.sp
+    }
+    val detailFontSize = when {
+        veryCompactMode -> 11.sp
+        compactMode -> 13.sp
+        else -> 15.sp
+    }
+    val hintFontSize = when {
+        veryCompactMode -> 10.sp
+        compactMode -> 12.sp
+        else -> 13.sp
+    }
+    val titleGap = when {
+        veryCompactMode -> 4.dp
+        compactMode -> 6.dp
+        else -> 10.dp
+    }
+    val bottomGap = when {
+        veryCompactMode -> 6.dp
+        compactMode -> 8.dp
+        else -> 12.dp
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -557,25 +821,27 @@ private fun WeatherSummaryCard(
         border = BorderStroke(1.dp, Color(0xFF363636)),
         shape = RoundedCornerShape(16.dp),
     ) {
-        Column(modifier = Modifier.padding(24.dp)) {
+        Column(modifier = Modifier.padding(contentPadding)) {
             Text(
                 text = "Weather",
                 color = Color(0xFFBDBDBD),
-                fontSize = 16.sp,
+                fontSize = labelFontSize,
             )
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(titleGap))
 
             when (weatherState) {
                 WeatherUiState.Loading -> {
                     Text(
                         text = city,
-                        fontSize = 26.sp,
+                        fontSize = cityFontSize,
                         fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = "Loading…",
+                        text = "Loading...",
                         color = Color(0xFFBDBDBD),
-                        fontSize = 18.sp,
+                        fontSize = conditionFontSize,
                     )
                 }
 
@@ -583,20 +849,23 @@ private fun WeatherSummaryCard(
                     val data = weatherState.data
                     Text(
                         text = data.placeName,
-                        fontSize = 26.sp,
+                        fontSize = cityFontSize,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = String.format(Locale.getDefault(), "%.0f°C", data.temperatureC),
-                        fontSize = 44.sp,
+                        fontSize = temperatureFontSize,
                         fontWeight = FontWeight.Light,
+                        maxLines = 1,
                     )
                     Text(
                         text = data.condition,
                         color = Color(0xFFD5D5D5),
-                        fontSize = 18.sp,
+                        fontSize = conditionFontSize,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = String.format(
@@ -606,35 +875,42 @@ private fun WeatherSummaryCard(
                             data.lowC,
                         ),
                         color = Color(0xFF9E9E9E),
-                        fontSize = 15.sp,
+                        fontSize = detailFontSize,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
 
                 is WeatherUiState.Error -> {
                     Text(
                         text = city,
-                        fontSize = 26.sp,
+                        fontSize = cityFontSize,
                         fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = weatherState.message,
                         color = Color(0xFFEF9A9A),
-                        fontSize = 15.sp,
-                        maxLines = 3,
+                        fontSize = detailFontSize,
+                        maxLines = if (veryCompactMode) 2 else 3,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
                     TextButton(onClick = onRefresh) {
-                        Text("Retry")
+                        Text(
+                            text = "Retry",
+                            fontSize = conditionFontSize,
+                        )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(bottomGap))
             Text(
                 text = "Tap to change city",
                 color = Color(0xFF7D7D7D),
-                fontSize = 13.sp,
+                fontSize = hintFontSize,
+                maxLines = 1,
             )
         }
     }
@@ -643,8 +919,31 @@ private fun WeatherSummaryCard(
 @Composable
 private fun FeatureTile(
     item: FeatureItem,
+    compactMode: Boolean,
+    veryCompactMode: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val contentPadding = when {
+        veryCompactMode -> 12.dp
+        compactMode -> 18.dp
+        else -> 28.dp
+    }
+    val titleFontSize = when {
+        veryCompactMode -> 19.sp
+        compactMode -> 23.sp
+        else -> 31.sp
+    }
+    val subtitleFontSize = when {
+        veryCompactMode -> 12.sp
+        compactMode -> 14.sp
+        else -> 16.sp
+    }
+    val textGap = when {
+        veryCompactMode -> 6.dp
+        compactMode -> 8.dp
+        else -> 10.dp
+    }
+
     Card(
         modifier = modifier.clickable(onClick = item.onClick),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
@@ -654,21 +953,25 @@ private fun FeatureTile(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(28.dp),
+                .padding(contentPadding),
             contentAlignment = Alignment.CenterStart,
         ) {
             Column {
                 Text(
                     text = item.title,
                     color = Color.White,
-                    fontSize = 31.sp,
+                    fontSize = titleFontSize,
                     fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(textGap))
                 Text(
                     text = item.subtitle,
                     color = Color(0xFF9E9E9E),
-                    fontSize = 16.sp,
+                    fontSize = subtitleFontSize,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -731,6 +1034,7 @@ private fun AllAppsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .safeDrawingPadding()
             .padding(36.dp),
     ) {
         Row(
