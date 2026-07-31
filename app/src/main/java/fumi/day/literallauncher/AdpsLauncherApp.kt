@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -52,7 +54,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -94,7 +98,7 @@ private enum class LauncherPage {
 
 private data class FeatureItem(
     val title: String,
-    val subtitle: String,
+    @DrawableRes val iconRes: Int,
     val onClick: () -> Unit,
 )
 
@@ -272,14 +276,14 @@ private fun HomeScreen(
     onAllAppsClick: () -> Unit,
 ) {
     val features = listOf(
-        FeatureItem("Weather", "Select a city", onWeatherClick),
-        FeatureItem("HDMI", "Input switching", onHdmiClick),
-        FeatureItem("YouTube", "Open video app", onYouTubeClick),
-        FeatureItem("Browser", "Open the web", onBrowserClick),
-        FeatureItem("Maps", "Open Naver Map", onMapsClick),
-        FeatureItem("Settings", "System settings", onSettingsClick),
-        FeatureItem("AI Assistant", "Ask Gemini", onAiAssistantClick),
-        FeatureItem("Screen Saver", "Preview mode", onScreenSaverClick),
+        FeatureItem("Weather", R.drawable.ic_weather, onWeatherClick),
+        FeatureItem("HDMI", R.drawable.ic_hdmi, onHdmiClick),
+        FeatureItem("YouTube", R.drawable.ic_youtube, onYouTubeClick),
+        FeatureItem("Browser", R.drawable.ic_browser, onBrowserClick),
+        FeatureItem("Maps", R.drawable.ic_maps, onMapsClick),
+        FeatureItem("Settings", R.drawable.ic_settings, onSettingsClick),
+        FeatureItem("AI Assistant", R.drawable.ic_ai_assistant, onAiAssistantClick),
+        FeatureItem("Screen Saver", R.drawable.ic_screen_saver, onScreenSaverClick),
     )
 
     BoxWithConstraints(
@@ -924,24 +928,24 @@ private fun FeatureTile(
     modifier: Modifier = Modifier,
 ) {
     val contentPadding = when {
-        veryCompactMode -> 12.dp
-        compactMode -> 18.dp
-        else -> 28.dp
+        veryCompactMode -> 10.dp
+        compactMode -> 14.dp
+        else -> 20.dp
+    }
+    val iconSize = when {
+        veryCompactMode -> 58.dp
+        compactMode -> 76.dp
+        else -> 100.dp
     }
     val titleFontSize = when {
-        veryCompactMode -> 19.sp
-        compactMode -> 23.sp
-        else -> 31.sp
+        veryCompactMode -> 15.sp
+        compactMode -> 18.sp
+        else -> 22.sp
     }
-    val subtitleFontSize = when {
-        veryCompactMode -> 12.sp
-        compactMode -> 14.sp
-        else -> 16.sp
-    }
-    val textGap = when {
+    val iconTitleGap = when {
         veryCompactMode -> 6.dp
-        compactMode -> 8.dp
-        else -> 10.dp
+        compactMode -> 10.dp
+        else -> 14.dp
     }
 
     Card(
@@ -950,30 +954,33 @@ private fun FeatureTile(
         border = BorderStroke(1.dp, Color(0xFF363636)),
         shape = RoundedCornerShape(16.dp),
     ) {
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(contentPadding),
-            contentAlignment = Alignment.CenterStart,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
         ) {
-            Column {
-                Text(
-                    text = item.title,
-                    color = Color.White,
-                    fontSize = titleFontSize,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(modifier = Modifier.height(textGap))
-                Text(
-                    text = item.subtitle,
-                    color = Color(0xFF9E9E9E),
-                    fontSize = subtitleFontSize,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            Image(
+                painter = painterResource(id = item.iconRes),
+                contentDescription = item.title,
+                modifier = Modifier
+                    .width(iconSize)
+                    .height(iconSize),
+                contentScale = ContentScale.Fit,
+            )
+
+            Spacer(modifier = Modifier.height(iconTitleGap))
+
+            Text(
+                text = item.title,
+                color = Color.White,
+                fontSize = titleFontSize,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
