@@ -28,6 +28,9 @@ ADPS 디스플레이 제품을 위한 가로형 Android 런처 프로토타입�
 - 브라우저 바로가기
 - 웹 지도 바로가기
 - Android 시스템 설정 바로가기
+- 로컬·USB 사진 및 동영상 통합 Gallery
+- 선택형 Media Show
+- 같은 Wi-Fi에서 사용하는 스마트폰 웹 리모컨
 
 ## 홈 화면 구성
 
@@ -77,6 +80,31 @@ app/src/main/java/fumi/day/literallauncher/AdpsLauncherApp.kt
 
 따라서 에뮬레이터에 표시되는 앱 목록과 실제 ADPS 제품에 표시되는 앱 목록은 다를 수 있습니다.
 
+### Gallery와 Media Show
+
+Android MediaStore가 색인한 로컬 저장소와 USB 저장장치의 사진·동영상을 함께 표시합니다.
+
+- `All`·`Local`·`USB` 출처 필터
+- 사진 크게 보기와 동영상 재생
+- 사진·동영상 다중 선택
+- 선택한 순서대로 Media Show 반복 재생
+- 사진 표시 간격 3초·5초·10초 설정
+- USB 장착·제거 시 목록 및 선택 항목 갱신
+
+### Smartphone Remote Control
+
+Gallery 상단의 `Remote` 버튼을 누르면 안드로이드 보드에서 로컬 원격 제어 서버가 실행됩니다.
+
+1. 안드로이드 보드와 스마트폰을 같은 Wi-Fi에 연결합니다.
+2. Gallery의 `Remote` 버튼을 누릅니다.
+3. 표시된 QR 코드를 스마트폰으로 스캔하거나 IP 주소를 브라우저에 입력합니다.
+4. 직접 주소를 입력한 경우 화면에 표시된 6자리 PIN으로 연결합니다.
+5. 디스플레이에서 Media Show 콘텐츠를 선택한 뒤 스마트폰에서 재생을 제어합니다.
+
+스마트폰에서는 Media Show 시작·재생·일시정지·이전·다음·종료와 사진 표시 간격을 제어할 수 있습니다. 서버는 Gallery 또는 Media Show 화면이 열려 있는 동안에만 동작하며 인터넷 연결은 필요하지 않습니다.
+
+기본 포트는 `8765`입니다. 공유기의 AP Isolation 또는 Client Isolation 기능이 켜져 있으면 같은 Wi-Fi에서도 기기 간 연결이 차단될 수 있습니다.
+
 ## 빌드 및 실행 방법
 
 1. Android Studio에서 프로젝트 최상위 폴더를 엽니다.
@@ -93,6 +121,7 @@ app/src/main/java/fumi/day/literallauncher/AdpsLauncherApp.kt
 - HDMI 입력 전환은 실제 하드웨어와 연결되지 않았습니다.
 - 웹 기반 기능은 브라우저와 인터넷 연결이 필요합니다.
 - 비GMS 장비에서는 Google 애플리케이션이 제공되지 않을 수 있습니다.
+- 스마트폰 원격 제어는 보드와 스마트폰이 서로 통신할 수 있는 같은 로컬 네트워크가 필요합니다.
 
 ## 향후 개선 계획
 
@@ -117,7 +146,9 @@ app/
             └─ day/
                └─ literallauncher/
                   ├─ MainActivity.kt
-                  └─ AdpsLauncherApp.kt
+                  ├─ AdpsLauncherApp.kt
+                  ├─ MediaGalleryScreen.kt
+                  └─ RemoteControl.kt
 ```
 
 ## 기반 프로젝트 및 라이선스

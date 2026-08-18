@@ -51,6 +51,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -78,6 +79,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -124,7 +126,15 @@ internal fun MediaGalleryScreen(
     var viewerItems by remember { mutableStateOf<List<MediaGalleryItem>>(emptyList()) }
     var viewerIndex by remember { mutableIntStateOf(0) }
     var mediaShowItems by remember { mutableStateOf<List<MediaGalleryItem>>(emptyList()) }
+    var mediaShowIndex by remember { mutableIntStateOf(0) }
+    var mediaShowPaused by remember { mutableStateOf(false) }
     var imageIntervalSeconds by remember { mutableIntStateOf(5) }
+    var showRemoteControlDialog by remember { mutableStateOf(false) }
+
+    val remoteControl = remember(context.applicationContext) {
+        RemoteControlCoordinator(context.applicationContext)
+    }
+    val remoteServerState by remoteControl.serverState.collectAsState()
 
     var permissionGranted by remember {
         mutableStateOf(hasMediaGalleryPermission(context))
@@ -156,6 +166,11 @@ internal fun MediaGalleryScreen(
             errorMessage =
                 "Photo and video access is required to browse media on this device."
         }
+    }
+
+    DisposableEffect(remoteControl) {
+        remoteControl.start()
+        onDispose { remoteControl.stop() }
     }
 
     DisposableEffect(context) {
@@ -216,6 +231,10 @@ internal fun MediaGalleryScreen(
 
                 if (mediaShowItems.isEmpty() && mode == MediaGalleryMode.MEDIA_SHOW) {
                     mode = MediaGalleryMode.SELECT
+                    mediaShowIndex = 0
+                    mediaShowPaused = false
+                } else if (mediaShowItems.isNotEmpty()) {
+                    mediaShowIndex = mediaShowIndex.coerceIn(0, mediaShowItems.lastIndex)
                 }
 
                 if (refreshedItems.isEmpty()) {
@@ -236,6 +255,91 @@ internal fun MediaGalleryScreen(
         )
 
         isLoading = false
+    }
+
+    LaunchedEffect(remoteControl) {
+        remoteControl.commands.collect { command ->
+            when (command) {
+                RemoteMediaCommand.Start -> {
+                    val itemsByKey = mediaItems.associateBy { it.key }
+                    val selectedPlaylist = selectedKeys.mapNotNull { itemsByKey[it] }
+                    val playlist = selectedPlaylist.ifEmpty { mediaShowItems }
+                    if (playlist.isNotEmpty()) {
+                        mediaShowItems = playlist
+                        mediaShowIndex = 0
+                        mediaShowPaused = false
+                        mode = MediaGalleryMode.MEDIA_SHOW
+                    }
+                }
+
+                RemoteMediaCommand.Play -> {
+                    if (mode == MediaGalleryMode.MEDIA_SHOW) mediaShowPaused = false
+                }
+
+                RemoteMediaCommand.Pause -> {
+                    if (mode == MediaGalleryMode.MEDIA_SHOW) mediaShowPaused = true
+                }
+
+                RemoteMediaCommand.Previous -> {
+                    if (mode == MediaGalleryMode.MEDIA_SHOW && mediaShowItems.isNotEmpty()) {
+                        mediaShowIndex = if (mediaShowIndex == 0) {
+                            mediaShowItems.lastIndex
+                        } else {
+                            mediaShowIndex - 1
+                        }
+                    }
+                }
+
+                RemoteMediaCommand.Next -> {
+                    if (mode == MediaGalleryMode.MEDIA_SHOW && mediaShowItems.isNotEmpty()) {
+                        mediaShowIndex = (mediaShowIndex + 1) % mediaShowItems.size
+                    }
+                }
+
+                RemoteMediaCommand.Stop -> {
+                    if (mode == MediaGalleryMode.MEDIA_SHOW) {
+                        mediaShowPaused = false
+                        mode = MediaGalleryMode.SELECT
+                    }
+                }
+
+                is RemoteMediaCommand.SetImageInterval -> {
+                    imageIntervalSeconds = command.seconds
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(
+        mediaItems,
+        selectedKeys,
+        mediaShowItems,
+        mediaShowIndex,
+        mediaShowPaused,
+        imageIntervalSeconds,
+        mode,
+    ) {
+        val itemsByKey = mediaItems.associateBy { it.key }
+        val selectedPlaylist = selectedKeys.mapNotNull { itemsByKey[it] }
+        val readyPlaylist = mediaShowItems.ifEmpty { selectedPlaylist }
+        val mediaShowActive = mode == MediaGalleryMode.MEDIA_SHOW && mediaShowItems.isNotEmpty()
+        val currentMedia = if (mediaShowActive) {
+            mediaShowItems.getOrNull(mediaShowIndex)
+        } else {
+            null
+        }
+
+        remoteControl.updateMediaStatus(
+            RemoteMediaStatus(
+                playlistReady = readyPlaylist.isNotEmpty(),
+                active = mediaShowActive,
+                paused = mediaShowActive && mediaShowPaused,
+                currentTitle = currentMedia?.displayName.orEmpty(),
+                currentPosition = if (currentMedia == null) 0 else mediaShowIndex + 1,
+                itemCount = if (mediaShowActive) mediaShowItems.size else readyPlaylist.size,
+                imageIntervalSeconds = imageIntervalSeconds,
+            ),
+        )
     }
 
     when {
@@ -261,8 +365,14 @@ internal fun MediaGalleryScreen(
         mode == MediaGalleryMode.MEDIA_SHOW && mediaShowItems.isNotEmpty() -> {
             SelectedMediaShowScreen(
                 mediaItems = mediaShowItems,
+                currentIndex = mediaShowIndex,
+                paused = mediaShowPaused,
                 imageIntervalSeconds = imageIntervalSeconds,
-                onExit = { mode = MediaGalleryMode.SELECT },
+                onIndexChanged = { mediaShowIndex = it },
+                onExit = {
+                    mediaShowPaused = false
+                    mode = MediaGalleryMode.SELECT
+                },
             )
         }
 
@@ -284,6 +394,8 @@ internal fun MediaGalleryScreen(
             },
             onFilterChanged = { sourceFilter = it },
             onRefresh = { refreshKey++ },
+            remoteServerRunning = remoteServerState.running,
+            onRemoteControl = { showRemoteControlDialog = true },
             onOpenItem = { index ->
                 viewerItems = filteredItems
                 viewerIndex = index
@@ -291,6 +403,9 @@ internal fun MediaGalleryScreen(
             },
             onEnterSelectionMode = {
                 selectedKeys = emptyList()
+                mediaShowItems = emptyList()
+                mediaShowIndex = 0
+                mediaShowPaused = false
                 mode = MediaGalleryMode.SELECT
             },
             onToggleSelection = { media ->
@@ -312,9 +427,18 @@ internal fun MediaGalleryScreen(
                 val itemsByKey = mediaItems.associateBy { it.key }
                 mediaShowItems = selectedKeys.mapNotNull { itemsByKey[it] }
                 if (mediaShowItems.isNotEmpty()) {
+                    mediaShowIndex = 0
+                    mediaShowPaused = false
                     mode = MediaGalleryMode.MEDIA_SHOW
                 }
             },
+        )
+    }
+
+    if (showRemoteControlDialog) {
+        RemoteControlDialog(
+            state = remoteServerState,
+            onDismiss = { showRemoteControlDialog = false },
         )
     }
 }
@@ -331,6 +455,8 @@ private fun MediaGalleryBrowserScreen(
     onBack: () -> Unit,
     onFilterChanged: (MediaGallerySource) -> Unit,
     onRefresh: () -> Unit,
+    remoteServerRunning: Boolean,
+    onRemoteControl: () -> Unit,
     onOpenItem: (Int) -> Unit,
     onEnterSelectionMode: () -> Unit,
     onToggleSelection: (MediaGalleryItem) -> Unit,
@@ -402,6 +528,12 @@ private fun MediaGalleryBrowserScreen(
                     text = "Refresh",
                     height = controlHeight,
                     onClick = onRefresh,
+                )
+
+                GalleryControlButton(
+                    text = if (remoteServerRunning) "Remote" else "Remote...",
+                    height = controlHeight,
+                    onClick = onRemoteControl,
                 )
 
                 if (!selectionMode) {
@@ -741,10 +873,12 @@ private fun MediaGalleryViewerScreen(
 @Composable
 private fun SelectedMediaShowScreen(
     mediaItems: List<MediaGalleryItem>,
+    currentIndex: Int,
+    paused: Boolean,
     imageIntervalSeconds: Int,
+    onIndexChanged: (Int) -> Unit,
     onExit: () -> Unit,
 ) {
-    var currentIndex by remember(mediaItems) { mutableIntStateOf(0) }
     var failedVideoKeys by remember(mediaItems) { mutableStateOf<Set<String>>(emptySet()) }
     val currentMedia = mediaItems[currentIndex.coerceIn(0, mediaItems.lastIndex)]
 
@@ -753,14 +887,14 @@ private fun SelectedMediaShowScreen(
         repeat(mediaItems.size) {
             candidateIndex = (candidateIndex + 1) % mediaItems.size
             if (mediaItems[candidateIndex].key !in excludedKeys) {
-                currentIndex = candidateIndex
+                onIndexChanged(candidateIndex)
                 return
             }
         }
     }
 
-    LaunchedEffect(currentMedia.key, imageIntervalSeconds) {
-        if (currentMedia.type == MediaGalleryType.IMAGE) {
+    LaunchedEffect(currentMedia.key, imageIntervalSeconds, paused) {
+        if (currentMedia.type == MediaGalleryType.IMAGE && !paused) {
             delay(imageIntervalSeconds * 1_000L)
             showNext()
         }
@@ -773,7 +907,7 @@ private fun SelectedMediaShowScreen(
         MediaGalleryItemContent(
             media = currentMedia,
             modifier = Modifier.fillMaxSize(),
-            autoPlayVideo = true,
+            autoPlayVideo = !paused,
             showVideoControls = false,
             onVideoEnded = { showNext() },
             onVideoError = {
@@ -790,8 +924,12 @@ private fun SelectedMediaShowScreen(
         )
 
         Text(
-            text = "${currentIndex + 1} / ${mediaItems.size}  ·  " +
-                "${currentMedia.type.label()}  ·  Touch anywhere to return",
+            text = buildString {
+                append("${currentIndex + 1} / ${mediaItems.size}  ·  ")
+                append(currentMedia.type.label())
+                if (paused) append("  ·  Paused")
+                append("  ·  Touch anywhere to return")
+            },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 18.dp)
