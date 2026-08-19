@@ -133,6 +133,12 @@ private sealed interface AiUiState {
     data class Error(val message: String) : AiUiState
 }
 
+private enum class TvAppLaunchResult {
+    LAUNCHED,
+    NOT_FOUND,
+    FAILED,
+}
+
 @Composable
 fun AdpsLauncherApp() {
     MaterialTheme(colorScheme = LauncherColors) {
@@ -197,7 +203,18 @@ fun AdpsLauncherApp() {
                     onWeatherClick = { showCityDialog = true },
                     onWeatherRefresh = { weatherRefreshKey++ },
                     onHdmiClick = {
-                        messageDialog = "HDMI 버튼은 준비되었습니다. 실제 입력 전환은 보드 제조사 API를 연결한 뒤 동작합니다."
+                        when (launchTvApp(context)) {
+                            TvAppLaunchResult.LAUNCHED -> Unit
+                            TvAppLaunchResult.NOT_FOUND -> {
+                                messageDialog =
+                                    "TV 앱을 찾을 수 없습니다. All Apps에서 앱 이름이 정확히 TV로 표시되는지 확인해주세요."
+                            }
+
+                            TvAppLaunchResult.FAILED -> {
+                                messageDialog =
+                                    "TV 앱은 찾았지만 실행할 수 없습니다. 시스템 권한 또는 앱 상태를 확인해주세요."
+                            }
+                        }
                     },
                     onYouTubeClick = {
                         val opened = launchFirstInstalledPackage(
@@ -1166,6 +1183,19 @@ private fun launchAppEntry(context: Context, app: AppEntry): Boolean {
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
     return startIntent(context, intent)
+}
+
+private fun launchTvApp(context: Context): TvAppLaunchResult {
+    val tvApps = loadLaunchableApps(context)
+        .filter { app -> app.label.trim().equals("TV", ignoreCase = true) }
+
+    if (tvApps.isEmpty()) return TvAppLaunchResult.NOT_FOUND
+
+    return if (tvApps.any { app -> launchAppEntry(context, app) }) {
+        TvAppLaunchResult.LAUNCHED
+    } else {
+        TvAppLaunchResult.FAILED
+    }
 }
 
 private fun launchFirstInstalledPackage(
